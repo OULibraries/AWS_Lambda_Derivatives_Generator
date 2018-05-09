@@ -25,6 +25,10 @@ exports.handler = function(event, context, callback){
 
 	var compressionRate = 0;
 
+	function setMessages(messages, text){
+		messages.push(text);
+	}
+
 	var parameters = event.queryStringParameters;
 	if(!parameters){
 		messages.push('event queryStringParameters is empty!');
@@ -113,44 +117,25 @@ exports.handler = function(event, context, callback){
 		  Key: sourceKey
 		};
 
-		let derivativeExists = false;
-
 		messages.push("Start processing images...");
-		
+
 		s3.headObject(params, function (err, metadata) {  
 			if (err && err.code === 'NotFound') {  
 			    messages.push("Cannot get derivative image from bucket: "+sourceBucket+" with key="+sourceKey+"!");
-				messages.push(err.toString());
-			   	console.log(err);
-			} else {  
-			    // s3.getSignedUrl('getObject', params, callback);  
-			    derivativeExists = true;
-			    messages.push("OKOK The derivative has already existed!");
-			}
-		});
-
-		if(derivativeExists === true){
-			messages.push("The derivative has already existed!");
-		}
-		else{
-			sourceKey = bagName + '/data/' + imageName + '.tif';
-			params.Key = sourceKey;
-
-			messages.push('Now the params is: Bucket: ' + params.Bucket + '; key: '+params.Key);
-
-			try{
+				messages.push(err.toString());	
+				sourceKey = bagName + '/data/' + imageName + '.tif';
+				let params = {
+					Bucket: sourceBucket,
+					Key: sourceKey
+				};	
 				s3.getObject(params, function(err, imageData) {
 
 					if (err) {
 					   messages.push("Cannot get original tif image from bucket: "+params.Bucket+" with key="+params.Key+"!");
 					   messages.push(err.toString());
-					   // console.log(err);
-					   sourceKey = bagName + '/data/' + imageName + '.tiff';
-					   params.sourceKey = sourceKey;
-
+					   sendResponse(messages, event);
 				    } else {
 
-					    // console.log('Successfully get the object');
 					    messages.push('Successfully get the object');
 					    messages.push("Retrieve the object from bucket: "+sourceBucket+" with key="+sourceKey+".");
 				
@@ -158,57 +143,137 @@ exports.handler = function(event, context, callback){
 						    sharp(imageData.Body).jpeg({quality: compressionRate}).toBuffer(function (err, resizeData) {
 
 					        	if (err) {
-					        		// console.log('Errors in converting the tiff image into JPEG!');
 						    		messages.push("Errors in converting the tiff image into JPEG! Object bucket: "+sourceBucket+", key:"+sourceKey+".");
+						    		sendResponse(messages, event);
+					        	}
+					        	else{
+					        		var base64data = new Buffer(resizeData, 'binary');
+							        var targetKey = bagName + '/data/' + imageName + '.' + imageType;
+
+							        s3.putObject({
+							            Bucket: targetBucket,
+							            Key: targetKey,
+							            Body: base64data,
+							            ACL: 'public-read'
+							        }, function (err, data) {
+							            if (err) {
+							                messages.push("Errors in saving the JPEG file as " + targetKey);	
+							                sendResponse(messages, event);              
+							            } else {
+							                messages.push("The converted JPEG file has been saved as "+targetKey);	
+							                sendResponse(messages, event);           
+							            }
+							        });
 					        	}
 
-
-						        var base64data = new Buffer(resizeData, 'binary');
-						        var targetKey = bagName + '/data/' + imageName + '.' + imageType;
-
-						        s3.putObject({
-						            Bucket: targetBucket,
-						            Key: targetKey,
-						            Body: base64data,
-						            ACL: 'public-read'
-						        }, function (err, data) {
-						            if (err) {
-						                // console.log('Failed to save new image due to an error: ' + err);
-						                messages.push("Errors in saving the JPEG file as " + targetKey);		                
-						            } else {
-						                // console.log('s3 image uploaded');
-						                messages.push("The converted JPEG file has been saved as "+targetKey);		                
-						            }
-						        });
+						        
 						    });
 						}
 						else{
 							messages.push('The convert format: '+convertFormat+' is not supported yet!');
+							sendResponse(messages, event);
 						}
 				    }
 
 				});
-			}
-			catch(err){
-				messages.push("Something is wrong during imaging process! Error: "+err.message);
-			}
-		}
+				// messages = processDerivative(sourceBucket, targetBucket, bagName, imageName, imageType, convertFormat, compressionRate, messages, event);	
+				// sendResponse(messages, event);   	
+			} else {   
+			    messages.push("OKOK The derivative has already existed!");
+			    sendResponse(messages, event);
+			}			
+		});
 
+
+	}
+
+	function processDerivative(sourceBucket, targetBucket, bagName, imageName, imageType, convertFormat, compressionRate, messages, event){
+
+		let sourceKey = bagName + '/data/' + imageName + '.tif';
+		let params = {
+			Bucket: sourceBucket,
+			Key: sourceKey
+		};
+
+		const AWS = require('aws-sdk');
+		let s3 = new AWS.S3();
+
+
+		messages.push('Now the params is: Bucket: ' + params.Bucket + '; key: '+params.Key);
+		// return messages;
+		try{
+			messages.push(s3.toString())
+			// s3.getObject(params, function(err, imageData) {
+
+			// 	if (err) {
+			// 	   messages.push("Cannot get original tif image from bucket: "+params.Bucket+" with key="+params.Key+"!");
+			// 	   messages.push(err.toString());
+			// 	   return messages;
+			//     } else {
+
+			// 	    messages.push('Successfully get the object');
+			// 	    messages.push("Retrieve the object from bucket: "+sourceBucket+" with key="+sourceKey+".");
+			
+			// 	    if(convertFormat === 'jpeg'){
+			// 		    sharp(imageData.Body).jpeg({quality: compressionRate}).toBuffer(function (err, resizeData) {
+
+			// 	        	if (err) {
+			// 		    		messages.push("Errors in converting the tiff image into JPEG! Object bucket: "+sourceBucket+", key:"+sourceKey+".");
+			// 		    		return messages;
+			// 	        	}
+			// 	        	else{
+			// 	        		var base64data = new Buffer(resizeData, 'binary');
+			// 			        var targetKey = bagName + '/data/' + imageName + '.' + imageType;
+
+			// 			        s3.putObject({
+			// 			            Bucket: targetBucket,
+			// 			            Key: targetKey,
+			// 			            Body: base64data,
+			// 			            ACL: 'public-read'
+			// 			        }, function (err, data) {
+			// 			            if (err) {
+			// 			                messages.push("Errors in saving the JPEG file as " + targetKey);	
+			// 			                return messages;                
+			// 			            } else {
+			// 			                messages.push("The converted JPEG file has been saved as "+targetKey);	
+			// 			                return messages;            
+			// 			            }
+			// 			        });
+			// 	        	}
+
+					        
+			// 		    });
+			// 		}
+			// 		else{
+			// 			messages.push('The convert format: '+convertFormat+' is not supported yet!');
+			// 			return messages;
+			// 		}
+			//     }
+
+			// });
+		}
+		catch(err){
+			messages.push("Something is wrong during imaging process! Error: "+err.message);
+			return messages;
+		}
+	}
+
+
+	function sendResponse(messages, event){
 		responseBody = {
 	        message: messages.toString(),
 	        input: event
 	    };
-
-		response = {
-	        statusCode: responseCode,
+	    response = {
+	        statusCode: 200,
 	        headers: {
-	            "x-custom-header" : "test v6"
+	            "x-custom-header" : "test v7"
 	        },
 	        body: JSON.stringify(responseBody)
 	    };
 
 	    console.log("response: " + JSON.stringify(response))
-	    callback(null, response);
+    	callback(null, response);
 	}
 }
 
