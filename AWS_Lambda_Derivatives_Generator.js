@@ -29,57 +29,69 @@ exports.handler = function(event, context, callback){
 		messages.push(text);
 	}
 
-	var parameters = event.queryStringParameters;
-	if(!parameters){
-		messages.push('event queryStringParameters is empty!');
+	if(!event || !event.params || !event.params.path){
+		messages.push("Invalid event object from API gateway!");
+		sendResponse(messages, event);
+		return false;
 	}
-	else{
-		// *** Get the parameters from event *** //
-		if (parameters.bagName) {
-	        bagName = parameters.bagName;
-	    }
 
-	    if (parameters.derivativeParams) {
-	        derivativeParams = parameters.derivativeParams;
-	    }
+	var parameters = event.params.path;
+	// *** Get the parameters from event *** //
+	if (parameters.bagName) {
+        bagName = parameters.bagName;
+    }
 
-	    if (parameters.imageName) {
-	        imageName = parameters.imageName;
-	    }
+    if (parameters.derivativeParams) {
+        derivativeParams = parameters.derivativeParams;
+    }
 
-	    if (parameters.imageType) {
-	        imageType = parameters.imageType;
-	    }
-	    
-	    if(!bagName){
-			messages.push('bagName papameter is empty!');
-		}
-
-		if(!derivativeParams){
-			messages.push('derivativeParams papameter is empty!');
-		}
-		else{
-			let derivativeParamsArr = derivativeParams.split('_');
-			if(derivativeParamsArr.length !== 3){
-				messages.push('derivativeParams papameter is NOT set correctly!');
-			}
-			else{
-				convertFormat = derivativeParamsArr[0];
-				try{
-					compressionRate = parseInt(derivativeParamsArr[1]);
-				}
-				catch(error){
-					messages.push('compressionRate is NOT a number! Error: '+error.message);
-				}
-			}
-		}
-
-		if(!imageName){
+    if (parameters.imageName) {
+        imageName = parameters.imageName;
+        if(!imageName){
 			messages.push('imageName papameter is empty!');
 		}
+		else{
+			let imageNameArr = imageName.split('.');
+			if(!imageNameArr || imageNameArr.length < 2){
+				messages.push('Invalid image name!');
+			}
+			else{					
+				imageType = imageNameArr.pop();
+				if(!imageType){
+					messages.push('imageType papameter is empty!');
+				}
+				else{
+					imageName = imageNameArr.join('.');
+				}
+			}
+			
+		}
+    }
 
-		if(!imageType){
-			messages.push('imageType papameter is empty!');
+    if (parameters.imageType) {
+        imageType = parameters.imageType;
+    }
+    
+    if(!bagName){
+		messages.push('bagName papameter is empty!');
+	}
+
+	if(!derivativeParams){
+		messages.push('derivativeParams papameter is empty!');
+	}
+	else{
+		let derivativeParamsArr = derivativeParams.split('_');
+		if(derivativeParamsArr.length !== 3){
+			messages.push('derivativeParams papameter is NOT set correctly!');
+		}
+		else{
+			convertFormat = derivativeParamsArr[0];
+			try{
+				compressionRate = parseInt(derivativeParamsArr[1]);
+			}
+			catch(error){
+				messages.push('compressionRate is NOT a number! Error: '+error.message);
+			}
 		}
 	}
 
